@@ -234,7 +234,16 @@ export class GameEngine {
     }
     if (power.target === "player" && (!targetPlayerId || targetPlayerId === playerId || !target)) throw new GameEngineError("Choose another player for this power.");
     playerCards.powerCardIds = playerCards.powerCardIds.filter((id) => id !== powerCardId);
-    game.actionLog.push({ id: this.createId(), type: "POWER_USED", playerId, timestamp: now, message: `${this.getPlayerName(game, playerId)} used ${power.name}.` });
+    const targetName = targetPlayerId ? this.getPlayerName(game, targetPlayerId) : undefined;
+    const constituencyName = constituencyId ? game.board.find((constituency) => constituency.id === constituencyId)?.name : undefined;
+    const targetDescription = targetName && constituencyName
+      ? ` against ${targetName} in ${constituencyName}`
+      : targetName
+        ? ` against ${targetName}`
+        : constituencyName
+          ? ` in ${constituencyName}`
+          : "";
+    game.actionLog.push({ id: this.createId(), type: "POWER_USED", playerId, timestamp: now, message: `${this.getPlayerName(game, playerId)} used ${power.name}${targetDescription}.` });
     game.updatedAt = now;
     return game;
   }
@@ -249,7 +258,16 @@ export class GameEngine {
     if (resourceType === "fascism") this.removeOrConvertVoters(game, playerId, targetPlayerId, constituencyId, 5, false);
     playerCards.resourceAbilityCharges[resourceType] -= 1;
     const now = this.now();
-    game.actionLog.push({ id: this.createId(), type: "RESOURCE_ABILITY_USED", playerId, timestamp: now, message: `${this.getPlayerName(game, playerId)} used a ${resourceType} ideology ability.` });
+    const targetName = targetPlayerId ? this.getPlayerName(game, targetPlayerId) : undefined;
+    const constituencyName = constituencyId ? game.board.find((constituency) => constituency.id === constituencyId)?.name : undefined;
+    const targetDescription = targetName && constituencyName
+      ? ` against ${targetName} in ${constituencyName}`
+      : targetName
+        ? ` against ${targetName}`
+        : constituencyName
+          ? ` in ${constituencyName}`
+          : "";
+    game.actionLog.push({ id: this.createId(), type: "RESOURCE_ABILITY_USED", playerId, timestamp: now, message: `${this.getPlayerName(game, playerId)} used a ${resourceType} ideology ability${targetDescription}.` });
     game.updatedAt = now;
     return game;
   }

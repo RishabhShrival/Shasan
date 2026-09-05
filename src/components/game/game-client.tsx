@@ -416,8 +416,8 @@ export function GameClient({ roomCode }: GameClientProps) {
 
               <Card className="mt-5 p-5 sm:p-7">
                 <p className="text-xs font-bold tracking-[0.18em] text-[#d9ae4d]">SHARED POWER MARKET</p>
-                <h2 className="mt-1 font-serif text-2xl font-bold text-[#f7ebd3]">{game.powerOffer.name}</h2>
-                <p className="mt-3 text-sm leading-6 text-[#aab5c3]">{game.powerOffer.description}</p>
+                <h2 className="mt-1 font-serif text-2xl font-bold text-[#f7ebd3]">Sealed political power</h2>
+                <p className="mt-3 text-sm leading-6 text-[#aab5c3]">Its effect remains hidden until a player purchases it.</p>
                 <p className="mt-4 text-xs font-semibold tracking-[0.12em] text-[#e5c36e]">PRICE: 1 CAPITALISM · 1 COMMUNISM · 1 SOCIALISM · 1 FASCISM</p>
                 <Button className="mt-4" disabled={!isYourTurn || game.phase !== "ACTION_PHASE" || game.turnState.actionTaken} onClick={buyPower}>BUY THIS POWER</Button>
                 <p className="mt-3 text-xs text-[#8290a1]">Everyone sees this power. When bought, it moves privately to the buyer and a new shared power appears.</p>
