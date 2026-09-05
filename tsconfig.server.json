@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".server",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "esModuleInterop": true,
+    "incremental": false
+  },
+  "include": ["server.ts", "src/server/**/*.ts", "src/game/types/**/*.ts"],
+  "exclude": ["node_modules", ".next", ".server"]
+}
