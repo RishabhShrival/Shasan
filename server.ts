@@ -14,7 +14,7 @@ import type {
 } from "./src/server/socket/events";
 
 const development = process.env.NODE_ENV !== "production";
-const hostname = process.env.HOST ?? "localhost";
+const hostname = process.env.HOST ?? (development ? "localhost" : "0.0.0.0");
 const port = Number(process.env.PORT ?? 3000);
 const nextApp = next({ dev: development, hostname, port });
 const nextHandler = nextApp.getRequestHandler();
