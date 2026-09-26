@@ -3,7 +3,6 @@ import { MessageSquareQuote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { GamePlayer, GameView } from "@/game/types";
-import { IDEOLOGY_STYLES } from "@/lib/ideology";
 
 import { ResourceList } from "./resource-chips";
 
@@ -34,27 +33,17 @@ export function DecisionPanel({ game, viewerId, isYourTurn, currentPlayer, onDec
         <>
           <h3 className="mt-3 text-lg font-semibold leading-snug text-[#f5ead5]">{question.question}</h3>
           <p className="mt-2 text-xs text-[#8d9aab]">
-            {isYourTurn ? "Your answer decides which resources you receive." : `Waiting for ${currentPlayer?.username ?? "the player"} to answer.`}
+            {isYourTurn ? "Answer YES or NO." : `Waiting for ${currentPlayer?.username ?? "the player"} to answer.`}
           </p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {([question.yes, question.no] as const).map((option) => {
-              const style = IDEOLOGY_STYLES[option.dominantResource];
-              return (
-                <div key={option.label} className="rounded-sm border p-3" style={{ borderColor: `${style.color}66`, backgroundColor: `${style.color}10` }}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-white">{option.label.toUpperCase()}</span>
-                    <span className="text-[10px] font-bold tracking-[0.1em]" style={{ color: style.text }}>{style.label.toUpperCase()}</span>
-                  </div>
-                  <div className="mt-2"><ResourceList resources={option.rewards} /></div>
-                  {isYourTurn ? (
-                    <Button size="sm" className="mt-3 w-full" variant={option.label === "Yes" ? "default" : "outline"} onClick={() => onDecide(option.label)}>
-                      ANSWER {option.label.toUpperCase()}
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
+          <p className="mt-3 text-[11px] leading-5 text-[#7d8a9b]">
+            The resources and ideology behind each answer are secret. Think about which ideology your answer supports — you will see what you earned only after you choose.
+          </p>
+          {isYourTurn ? (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button onClick={() => onDecide("Yes")}>YES</Button>
+              <Button variant="outline" onClick={() => onDecide("No")}>NO</Button>
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="mt-3 text-sm text-[#9da9b9]">

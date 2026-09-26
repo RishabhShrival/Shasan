@@ -25,7 +25,7 @@ export const POWER_CARDS: PowerCard[] = [
     id: "coalition-gift",
     name: "Coalition Gift",
     category: "resource",
-    description: "Donate 1 to 3 of your resources to a rival. For every resource you donate, gain 1 voter in your reserve.",
+    description: "Donate 1 to 3 of your resources to a rival. For every resource you donate, gain 1 new voter — place them on the board right away.",
     inputs: ["targetPlayer", "resourcePick"],
     resourcePickCount: 3,
   },
@@ -78,7 +78,7 @@ export const POWER_CARDS: PowerCard[] = [
     id: "volunteer-army",
     name: "Volunteer Army",
     category: "board",
-    description: "Gain 3 voters in your reserve. Place them on the board any time during your turns.",
+    description: "Gain 3 new voters and place them on the board right away.",
     inputs: [],
   },
   {
@@ -90,9 +90,9 @@ export const POWER_CARDS: PowerCard[] = [
   },
   {
     id: "recount",
-    name: "Recount",
+    name: "Evict Voters",
     category: "board",
-    description: "Remove up to 2 rival voters from a constituency where nobody holds a majority.",
+    description: "Evict up to 2 rival voters from a constituency where nobody holds a majority. They go to that rival's reserve, and the rival may place them again on their own turn.",
     inputs: ["targetPlayer", "constituency"],
   },
   {
@@ -211,7 +211,7 @@ export const IDEOLOGY_ABILITIES: Record<ResourceType, PowerCard> = {
     id: "ability-idealism",
     name: "People's Movement",
     category: "board",
-    description: "Gain 3 voters in your reserve.",
+    description: "Gain 3 new voters and place them on the board right away.",
     inputs: [],
   },
   conservatism: {
@@ -225,7 +225,7 @@ export const IDEOLOGY_ABILITIES: Record<ResourceType, PowerCard> = {
     id: "ability-supremacy",
     name: "Iron Fist",
     category: "board",
-    description: "Remove up to 3 rival voters from a constituency where nobody holds a majority.",
+    description: "Evict up to 3 rival voters from a constituency where nobody holds a majority. They go to that rival's reserve.",
     inputs: ["targetPlayer", "constituency"],
   },
 };

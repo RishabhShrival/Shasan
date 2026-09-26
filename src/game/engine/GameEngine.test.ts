@@ -69,10 +69,20 @@ describe("GameEngine", () => {
     expect(game.voterMarket[0]).toBe("chai-stall-chat");
     expect(game.voterMarket[1]).not.toBe("rti-volunteers");
     expect(game.voterMarket[2]).toBe("startup-meetup");
+    expect(game.playerCards.a.votersToPlace).toBe(1);
+
+    // Bought voters must be placed before buying again or ending the turn.
+    expect(() => engine.buyVoter(game, "a", "chai-stall-chat")).toThrow("Place your 1 new voter");
+    expect(() => engine.endTurn(game, "a")).toThrow("before ending your turn");
+    engine.placeVoters(game, "a", "madhyanagar", 1);
 
     engine.buyVoter(game, "a", "chai-stall-chat");
+    engine.placeVoters(game, "a", "madhyanagar", 1);
     engine.buyVoter(game, "a", "startup-meetup");
-    expect(game.playerCards.a.reserveVoters).toBe(4);
+    engine.placeVoters(game, "a", "gangapur-valley", 2);
+    expect(game.board.find((area) => area.id === "madhyanagar")?.voterCounts.a).toBe(2);
+    expect(game.playerCards.a.votersToPlace).toBe(0);
+    expect(game.playerCards.a.reserveVoters).toBe(0);
     expect(game.currentPlayerId).toBe("a");
   });
 
@@ -109,6 +119,39 @@ describe("GameEngine", () => {
     expect(game.voterMarket).toHaveLength(3);
     expect(game.voterMarket.some((id) => before.includes(id))).toBe(false);
     expect(() => engine.refreshVoterMarket(game, "a", { capitalism: 1 })).toThrow("already refreshed");
+  });
+
+  it("never reveals what an answer pays before it is chosen", () => {
+    const { engine, game } = setup();
+    const view = engine.createView(game, "a");
+    expect(view.currentDecision).toBeDefined();
+    expect(Object.keys(view.currentDecision!).sort()).toEqual(["id", "question", "topic"]);
+    expect(JSON.stringify(view)).not.toContain("dominantResource");
+  });
+
+  it("sends evicted voters to the owner's reserve so they can place them on their turn", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    place(game, "madhyanagar", { a: 3, b: 4 });
+    game.playerCards.a.sealedCards.push({ instanceId: "recount#9", powerId: "recount" });
+    engine.useSealedCard(game, "a", "recount#9", { targetPlayerId: "b", constituencyId: "madhyanagar" });
+    expect(game.board.find((area) => area.id === "madhyanagar")?.voterCounts.b).toBe(2);
+    expect(game.playerCards.b.reserveVoters).toBe(2);
+    engine.endTurn(game, "a");
+
+    engine.makeDecision(game, "b", "No");
+    game.playerCards.b.votersToPlace = 0; // ignore any round-event voters for this test
+    engine.placeVoters(game, "b", "himvant-hills", 2);
+    expect(game.playerCards.b.reserveVoters).toBe(0);
+    expect(game.board.find((area) => area.id === "himvant-hills")?.voterCounts.b).toBe(2);
+  });
+
+  it("does not force evicted voters back onto the board", () => {
+    const { engine, game } = setup();
+    game.playerCards.a.reserveVoters = 2;
+    engine.makeDecision(game, "a", "Yes");
+    expect(() => engine.endTurn(game, "a")).not.toThrow();
+    expect(game.playerCards.a.reserveVoters).toBe(2);
   });
 
   it("hides rivals' resources and sealed cards from the player view", () => {
@@ -177,8 +220,13 @@ describe("GameEngine", () => {
   it("has no fixed number of rounds", () => {
     const { engine, game } = setup();
     for (let turn = 0; turn < 60; turn += 1) {
-      engine.makeDecision(game, game.currentPlayerId, turn % 2 ? "Yes" : "No");
-      engine.endTurn(game, game.currentPlayerId);
+      const playerId = game.currentPlayerId;
+      engine.makeDecision(game, playerId, turn % 2 ? "Yes" : "No");
+      while (game.playerCards[playerId].votersToPlace > 0) {
+        const open = game.board.find((area) => area.totalVoters < area.seats && !area.lockedByPlayerId)!;
+        engine.placeVoters(game, playerId, open.id, 1);
+      }
+      engine.endTurn(game, playerId);
     }
     expect(game.status).toBe("PLAYING");
     expect(game.currentRound).toBe(21);

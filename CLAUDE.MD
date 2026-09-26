@@ -63,7 +63,7 @@ Socialism and Communism are **not** used. Ideology colours are used only for ide
 ---
 
 ## 3. Players
-Each player has: id, username, resources (private), voters on the board and in reserve, a public **ideology profile** (how many answers of each ideology they gave), sealed cards (private; rivals see only the count), ideology ability charges, and temporary effects.
+Each player has: id, username, resources (private), voters on the board, new voters that must be placed now, evicted voters in reserve, a public **ideology profile** (how many answers of each ideology they gave), sealed cards (private; rivals see only the count), ideology ability charges, and temporary effects.
 
 - Players start with **1 resource of each ideology**.
 - Maximum **12 resources** held at once (extra is lost).
@@ -75,7 +75,7 @@ Each player has: id, username, resources (private), voters on the board and in r
 - Every constituency has an **odd number of seats between 5 and 20** (validated at start-up). Seats = voter capacity.
 - **Majority** = strictly more than half of the seats: `playerVoters > seats / 2` (5 → 3, 7 → 4, 11 → 6 …). Having the most voters is NOT a majority.
 - Each tile shows `Majority: X / seats`, a seat-dot track, every player's voters there, and either the majority holder (tile glows in their colour) or **No Majority**.
-- **Hung constituency re-poll** (anti-deadlock): if a constituency is full but nobody has a majority, at the end of the turn every player not tied for the most voters there gets their voters back into reserve (if everyone there is tied, each takes 1 back).
+- **Hung constituency re-poll** (anti-deadlock): if a constituency is full but nobody has a majority, at the end of the turn every player not tied for the most voters there has those voters evicted to their reserve (if everyone there is tied, each loses 1).
 
 ## 5. Game end
 There is **no fixed number of rounds**. The game ends immediately when **every constituency has a majority**. Winner = most seats won (sum of seats of constituencies where they hold the majority); tie-breakers: total voters on the board, then number of majorities.
@@ -83,19 +83,23 @@ There is **no fixed number of rounds**. The game ends immediately when **every c
 ---
 
 ## 6. Turn flow
-1. **Political question** (mandatory): Yes/No question. Each answer gives exactly 4 resources and shows its main ideology before choosing. Everyone sees the question, the answer and the resources received.
+1. **Political question** (mandatory): Yes/No question. Each answer gives exactly 4 resources, but **what each answer pays (resources and ideology) is secret** — the server never sends it to clients before the answer. Players must guess from the question. After answering, everyone sees the answer and the resources received.
    - Every 3 answers of the same ideology → +2 of that ideology.
    - Every 5 answers of the same ideology → one charge of that ideology's ability.
 2. **Action phase** — any number of valid actions, in any order, until the player clicks **END TURN**:
-   - Buy **multiple** voter cards (reserve voters).
-   - Place reserve voters into constituencies with free seats.
+   - Buy **multiple** voter cards. Voters from a card **must be placed on the board immediately** — no other action (and no END TURN) is allowed until they are placed. Only if no open seat exists anywhere are they lost at the end of the turn.
+   - Place evicted voters from reserve (optional, any of your turns).
    - Buy **multiple** sealed cards.
    - Play sealed cards / ideology abilities.
    - Gerrymander (once per turn by default).
    - Refresh the voter market once per turn by discarding 1 resource (anti-stall).
 3. End turn → next player. When turn order wraps, a new round starts and a **round event** is revealed.
 
-## 7. Voter cards
+## 7. Voters, placement and reserve
+- There is **no holding of bought voters**. New voters (from voter cards, Volunteer Army, Coalition Gift, People's Movement, or round events) must be placed during the owner's action phase before anything else.
+- The **reserve** only holds **evicted** voters: voters removed from the board by a rival's eviction power (Evict Voters, Iron Fist) or by a hung re-poll. They return to the owner's reserve, and the owner may place them again on any of their turns.
+
+## 7b. Voter cards
 - Always **3 voter cards** on the shared market. A bought card is **replaced immediately in the same slot**.
 - Pricing: 1 voter = 2 resources · 2 voters = 3 · 3 voters = 5 · 4 voters = 7.
 
@@ -103,7 +107,7 @@ There is **no fixed number of rounds**. The game ends immediately when **every c
 - Market of 3 face-down sealed cards (only the category — resource / board / strategic — is visible). Deck contains 2 copies of each power; used cards are reshuffled.
 - Price: **any 4 resources** chosen by the buyer. The server checks exactly 4 were selected, all are owned, and the card is still available. (Card-specific requirements are supported by design but none currently exist.)
 - Players may hold any number of sealed cards. Only the owner sees names and text; rivals see the count.
-- Powers (26): Party Fund Drive, Tax Raid, Coalition Gift, Policy U-Turn, Income Tax Notice, Electoral Bonds, Clean Image Makeover, Nationwide Audit, Mega Rally, Volunteer Army, Defection, Recount, Transfer Order, Migrant Wave, Security Cover, Loyal Cadre, Section 144, Model Code of Conduct, Show-Cause Notice, House Suspension, Price Rise, Campaign Subsidy, Double Agenda, Delimitation Commission, Opinion Poll, Stay Order (passive negation). Full text lives in `powers.ts`.
+- Powers (26): Party Fund Drive, Tax Raid, Coalition Gift, Policy U-Turn, Income Tax Notice, Electoral Bonds, Clean Image Makeover, Nationwide Audit, Mega Rally, Volunteer Army, Defection, Evict Voters, Transfer Order, Migrant Wave, Security Cover, Loyal Cadre, Section 144, Model Code of Conduct, Show-Cause Notice, House Suspension, Price Rise, Campaign Subsidy, Double Agenda, Delimitation Commission, Opinion Poll, Stay Order (passive negation). Full text lives in `powers.ts`.
 - Protection: Security Cover (a constituency) and Loyal Cadre (all your voters) stop rivals removing, converting or moving voters until your next turn. Section 144 stops anyone adding voters to a constituency until your next turn.
 
 ## 9. Ideology abilities

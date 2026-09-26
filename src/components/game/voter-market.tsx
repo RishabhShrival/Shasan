@@ -31,7 +31,7 @@ export function VoterMarket({ game, canAct, onBuy, onRefresh }: VoterMarketProps
   return (
     <Card className="p-5 sm:p-6">
       <p className="inline-flex items-center gap-2 text-xs font-bold tracking-[0.18em] text-[#d9ae4d]"><UserPlus size={15} aria-hidden="true" /> VOTER CARDS</p>
-      <p className="mt-1 text-xs text-[#8d9aab]">Buy as many as you can afford. A bought card is replaced immediately.</p>
+      <p className="mt-1 text-xs text-[#8d9aab]">Buy as many as you can afford — but you must place a card&apos;s voters on the board right after buying it. A bought card is replaced immediately.</p>
       {blocked && canAct ? <p className="mt-2 text-xs text-[#f2a3a8]">Model Code of Conduct: you cannot buy voter cards this turn.</p> : null}
       {turnState.voterSurcharge > 0 && canAct ? <p className="mt-2 text-xs text-[#f2a3a8]">Price Rise: each card costs {turnState.voterSurcharge} extra random resource.</p> : null}
       <div className="mt-4 grid gap-2 sm:grid-cols-3">

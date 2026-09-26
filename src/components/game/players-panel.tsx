@@ -42,7 +42,7 @@ export function PlayersPanel({ game, viewerId }: { game: GameView; viewerId?: st
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-[#8d9aab]">
                 <span className="inline-flex items-center gap-1"><Crown size={10} aria-hidden="true" /> {stats.constituenciesControlled} maj · {stats.seatsControlled} seats</span>
-                <span>{stats.reserveVoters} reserve</span>
+                {stats.reserveVoters > 0 ? <span className="text-[#f2a3a8]">{stats.reserveVoters} evicted</span> : null}
                 <span>{stats.resourceCount} res</span>
                 <span className="inline-flex items-center gap-1"><Mail size={10} aria-hidden="true" /> {stats.sealedCardCount}</span>
                 {stats.votersShielded ? <span className="inline-flex items-center gap-1 text-[#9fcaff]"><ShieldCheck size={10} aria-hidden="true" /> shielded</span> : null}

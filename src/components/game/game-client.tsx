@@ -105,6 +105,11 @@ export function GameClient({ roomCode }: GameClientProps) {
   const currentPlayer = game?.players[currentPlayerIndex];
   const isYourTurn = Boolean(game && viewerId && game.currentPlayerId === viewerId && game.status === "PLAYING");
   const canAct = Boolean(isYourTurn && game?.phase === "ACTION_PHASE");
+  const openSeatExists = Boolean(game?.board.some((constituency) => constituency.totalVoters < constituency.seats && !constituency.lockedByPlayerId));
+  const votersToPlace = game?.yourCards.votersToPlace ?? 0;
+  /** Bought voters must be placed before any other action. */
+  const mustPlace = canAct && votersToPlace > 0 && openSeatExists;
+  const canUseOtherActions = canAct && !mustPlace && !pending;
 
   function handleResult(result: SocketResult<GameView>) {
     setPending(false);
@@ -196,31 +201,37 @@ export function GameClient({ roomCode }: GameClientProps) {
                         : "Take as many valid actions as you like, then end your turn."}
                     </p>
                   ) : null}
-                  <Button className="mt-4 w-full" onClick={actions.endTurn} disabled={!canAct || pending}>
+                  <Button className="mt-4 w-full" onClick={actions.endTurn} disabled={!canAct || pending || mustPlace}>
                     <Hourglass size={17} aria-hidden="true" />
-                    {isYourTurn ? (game.phase === "ACTION_PHASE" ? "END TURN" : "ANSWER FIRST") : "WAIT FOR YOUR TURN"}
+                    {isYourTurn ? (game.phase !== "ACTION_PHASE" ? "ANSWER FIRST" : mustPlace ? "PLACE YOUR VOTERS" : "END TURN") : "WAIT FOR YOUR TURN"}
                   </Button>
                 </Card>
                 <DecisionPanel game={game} viewerId={viewerId} isYourTurn={isYourTurn && !pending} currentPlayer={currentPlayer} onDecide={actions.decide} />
                 <YourResources game={game} />
               </aside>
               <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+                {mustPlace ? (
+                  <div role="status" className="animate-fade-up rounded-sm border border-[#d9ae4d]/60 bg-[#d9ae4d]/[0.12] px-4 py-3 text-sm text-[#f7ebd3] shadow-gold-glow">
+                    <span className="font-bold text-[#f3d584]">Place your {votersToPlace} new voter{votersToPlace === 1 ? "" : "s"} now.</span>{" "}
+                    Click <span className="font-bold">+1</span> on any constituency with free seats. Other actions unlock once they are on the board.
+                  </div>
+                ) : null}
                 <Card className="p-3 sm:p-5">
                   <ElectionBoard
                     board={game.board}
                     players={game.players}
                     viewerId={viewerId}
-                    placeableVoters={canAct && !pending ? game.yourCards.reserveVoters : 0}
+                    placeableVoters={canAct && !pending ? votersToPlace + game.yourCards.reserveVoters : 0}
                     onPlace={actions.place}
                     highlightIds={highlightIds}
                   />
                 </Card>
                 <div className="grid gap-4 xl:grid-cols-2">
-                  <VoterMarket game={game} canAct={canAct && !pending} onBuy={actions.buyVoter} onRefresh={actions.refreshVoters} />
-                  <SealedMarket game={game} canAct={canAct && !pending} onBuy={actions.buySealed} />
+                  <VoterMarket game={game} canAct={canUseOtherActions} onBuy={actions.buyVoter} onRefresh={actions.refreshVoters} />
+                  <SealedMarket game={game} canAct={canUseOtherActions} onBuy={actions.buySealed} />
                 </div>
-                <GerrymanderPanel game={game} viewerId={viewerId} canAct={canAct && !pending} onGerrymander={actions.gerrymander} onPreview={onPreview} />
-                <YourHand game={game} viewerId={viewerId} canAct={canAct && !pending} onUseSealed={actions.useSealed} onUseAbility={actions.useAbility} />
+                <GerrymanderPanel game={game} viewerId={viewerId} canAct={canUseOtherActions} onGerrymander={actions.gerrymander} onPreview={onPreview} />
+                <YourHand game={game} viewerId={viewerId} canAct={canUseOtherActions} onUseSealed={actions.useSealed} onUseAbility={actions.useAbility} />
               </div>
 
               <aside className="space-y-4 lg:col-start-2 lg:row-start-2">

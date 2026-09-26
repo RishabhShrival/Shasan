@@ -42,11 +42,21 @@ export function YourResources({ game }: { game: GameView }) {
           );
         })}
       </div>
-      <div className="mt-3 flex items-center justify-between rounded-sm border border-[#d9ae4d]/25 bg-[#d9ae4d]/[0.06] px-3 py-2">
-        <span className="text-xs font-semibold text-[#e9dcc3]">Voters in reserve</span>
-        <span className="text-xl font-semibold text-[#f3d584] tabular-nums">{game.yourCards.reserveVoters}</span>
-      </div>
-      {game.yourCards.reserveVoters > 0 ? <p className="mt-1.5 text-[10px] text-[#8d9aab]">Use the +1 buttons on the board during your action phase to place them.</p> : null}
+      {game.yourCards.votersToPlace > 0 ? (
+        <div className="mt-3 flex items-center justify-between rounded-sm border border-[#d9ae4d]/60 bg-[#d9ae4d]/[0.12] px-3 py-2">
+          <span className="text-xs font-semibold text-[#f7ebd3]">New voters to place now</span>
+          <span className="text-xl font-semibold text-[#f3d584] tabular-nums">{game.yourCards.votersToPlace}</span>
+        </div>
+      ) : null}
+      {game.yourCards.reserveVoters > 0 ? (
+        <>
+          <div className="mt-2 flex items-center justify-between rounded-sm border border-[#c95158]/35 bg-[#c95158]/[0.08] px-3 py-2">
+            <span className="text-xs font-semibold text-[#f2c2c4]">Evicted voters (reserve)</span>
+            <span className="text-xl font-semibold text-[#f2a3a8] tabular-nums">{game.yourCards.reserveVoters}</span>
+          </div>
+          <p className="mt-1.5 text-[10px] text-[#8d9aab]">A rival evicted these voters. Put them back with the +1 buttons on the board during your turn.</p>
+        </>
+      ) : null}
     </Card>
   );
 }

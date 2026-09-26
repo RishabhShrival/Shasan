@@ -65,25 +65,25 @@ export const EVENT_CARDS: EventCard[] = [
   {
     id: "startup-boom",
     title: "Startup Boom",
-    description: "The player with the strongest Capitalism profile gains 2 voters in reserve.",
+    description: "The player with the strongest Capitalism profile gains 2 new voters to place on their next turn.",
     effect: { kind: "ideologyLeaderVoters", ideology: "capitalism", voters: 2 },
   },
   {
     id: "whistleblower",
     title: "Whistleblower Hero",
-    description: "The player with the strongest Idealism profile gains 2 voters in reserve.",
+    description: "The player with the strongest Idealism profile gains 2 new voters to place on their next turn.",
     effect: { kind: "ideologyLeaderVoters", ideology: "idealism", voters: 2 },
   },
   {
     id: "religious-gathering",
     title: "Great Pilgrimage",
-    description: "The player with the strongest Conservatism profile gains 2 voters in reserve.",
+    description: "The player with the strongest Conservatism profile gains 2 new voters to place on their next turn.",
     effect: { kind: "ideologyLeaderVoters", ideology: "conservatism", voters: 2 },
   },
   {
     id: "military-parade",
     title: "Republic Day Parade",
-    description: "The player with the strongest Supremacy profile gains 2 voters in reserve.",
+    description: "The player with the strongest Supremacy profile gains 2 new voters to place on their next turn.",
     effect: { kind: "ideologyLeaderVoters", ideology: "supremacy", voters: 2 },
   },
   {
@@ -95,7 +95,7 @@ export const EVENT_CARDS: EventCard[] = [
   {
     id: "sympathy-wave",
     title: "Sympathy Wave",
-    description: "The public backs the underdog. The player with the fewest voters on the board gains 2 voters in reserve.",
+    description: "The public backs the underdog. The player with the fewest voters on the board gains 2 new voters to place on their next turn.",
     effect: { kind: "underdogVoters", voters: 2 },
   },
 ];

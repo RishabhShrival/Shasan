@@ -114,7 +114,7 @@ export function ElectionBoard({ board, players, viewerId, placeableVoters, onPla
 
               <div className="mt-auto flex flex-wrap items-center gap-1 pt-2 text-[10px]">
                 {free === 0 && !holder ? (
-                  <span className="rounded-sm bg-[#c95158]/15 px-1 font-bold text-[#f2a3a8]" title="Full with no majority: trailing voters return to reserve at the end of the turn">HUNG · RE-POLL</span>
+                  <span className="rounded-sm bg-[#c95158]/15 px-1 font-bold text-[#f2a3a8]" title="Full with no majority: trailing voters are evicted to their owners' reserve at the end of the turn">HUNG · RE-POLL</span>
                 ) : (
                   <span className="text-[#7f8c9d]">{free} free</span>
                 )}

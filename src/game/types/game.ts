@@ -47,7 +47,15 @@ export interface PlayerCardState {
   /** How many answers of each ideology this player has given. Public. */
   ideologyProfile: Record<ResourceType, number>;
   abilityCharges: Record<ResourceType, number>;
-  /** Voters bought but not yet placed on the board. */
+  /**
+   * New voters (bought, or gained from a power/event) that MUST be placed on the
+   * board during this player's current/next action phase before doing anything else.
+   */
+  votersToPlace: number;
+  /**
+   * Evicted voters: removed from the board by a rival's power (or a hung re-poll)
+   * and sent back to this player. They can be placed again on any of their turns.
+   */
   reserveVoters: number;
   /** Rivals cannot remove, convert or move this player's voters until their next turn starts. */
   votersShielded: boolean;
@@ -119,6 +127,7 @@ export interface GameState {
 export interface PublicPlayerStats {
   playerId: string;
   totalVoters: number;
+  /** Evicted voters waiting to return to the board. */
   reserveVoters: number;
   resourceCount: number;
   sealedCardCount: number;
@@ -128,7 +137,8 @@ export interface PublicPlayerStats {
   votersShielded: boolean;
 }
 
-export type PublicDecision = DecisionCard;
+/** Only the question is public. What each answer pays stays hidden until it is chosen. */
+export type PublicDecision = Pick<DecisionCard, "id" | "topic" | "question">;
 
 export interface SealedMarketSlot {
   instanceId: string;
@@ -167,6 +177,7 @@ export interface GameView {
     resources: Resources;
     sealedCards: OwnedSealedCard[];
     abilityCharges: Record<ResourceType, number>;
+    votersToPlace: number;
     reserveVoters: number;
     nextTurn: PlayerCardState["nextTurn"];
     intel?: PrivateIntel;

@@ -189,7 +189,7 @@ export class GameEngine {
       draft.turnState.voterDiscount = 0;
 
       const voters = card.voters + (this.modifiers(draft).voterCardBonus ?? 0);
-      cards.reserveVoters += voters;
+      cards.votersToPlace += voters;
       draft.voterDiscard.push(voterCardId);
       draft.voterMarket[slot] = this.cardManager.drawVoter(draft.voterDeck, draft.voterDiscard);
       this.log(draft, "VOTERS_PURCHASED", `${this.name(draft, playerId)} bought ${card.name} (+${voters} voter${voters === 1 ? "" : "s"}).`, playerId);
@@ -215,15 +215,20 @@ export class GameEngine {
     });
   }
 
-  /** Place voters from reserve into a constituency with free seats. */
+  /**
+   * Place voters on the board. New voters (votersToPlace) are used first, then
+   * evicted voters from reserve.
+   */
   placeVoters(game: GameState, playerId: string, constituencyId: string, count: number) {
     return this.transact(game, (draft) => {
-      this.assertActionPhase(draft, playerId);
+      this.assertActionPhase(draft, playerId, { allowWhilePlacing: true });
       const cards = this.getPlayerCards(draft, playerId);
       if (!Number.isInteger(count) || count < 1) throw new GameEngineError("Choose a valid number of voters.");
-      if (count > cards.reserveVoters) throw new GameEngineError("You do not have that many voters in reserve.");
+      if (count > cards.votersToPlace + cards.reserveVoters) throw new GameEngineError("You do not have that many voters to place.");
       const constituency = this.boardManager.addVoters(draft.board, constituencyId, playerId, count);
-      cards.reserveVoters -= count;
+      const fromNew = Math.min(count, cards.votersToPlace);
+      cards.votersToPlace -= fromNew;
+      cards.reserveVoters -= count - fromNew;
       this.log(draft, "VOTERS_PLACED", `${this.name(draft, playerId)} placed ${count} voter${count === 1 ? "" : "s"} in ${constituency.name}.`, playerId);
     });
   }
@@ -331,6 +336,14 @@ export class GameEngine {
       if (!draft.turnState.decisionMade || draft.phase !== "ACTION_PHASE") {
         throw new GameEngineError("Answer the political question before ending your turn.");
       }
+      const cards = this.getPlayerCards(draft, playerId);
+      if (this.mustPlaceNow(draft, playerId)) {
+        throw new GameEngineError(`Place your ${cards.votersToPlace} new voter${cards.votersToPlace === 1 ? "" : "s"} before ending your turn.`);
+      }
+      if (cards.votersToPlace > 0) {
+        this.log(draft, "VOTERS_PLACED", `${this.name(draft, playerId)} lost ${cards.votersToPlace} new voter(s): there was no open seat on the board.`, playerId);
+        cards.votersToPlace = 0;
+      }
       this.log(draft, "TURN_ENDED", `${this.name(draft, playerId)} ended their turn.`, playerId);
       this.resolveHungConstituencies(draft);
       this.advanceTurn(draft);
@@ -375,7 +388,7 @@ export class GameEngine {
       currentRound: state.currentRound,
       turnNumber: state.turnNumber,
       turnState: state.turnState,
-      currentDecision: state.currentDecisionCardId ? this.cardManager.getDecision(state.currentDecisionCardId) : undefined,
+      currentDecision: state.currentDecisionCardId ? this.toPublicDecision(state.currentDecisionCardId) : undefined,
       currentDecisionResolution: state.currentDecisionResolution,
       currentEvent: state.currentEventId ? this.cardManager.getEvent(state.currentEventId) : undefined,
       roundModifiers: this.modifiers(state),
@@ -415,11 +428,18 @@ export class GameEngine {
         resources: privateCards.resources,
         sealedCards: privateCards.sealedCards.map((card) => ({ ...this.cardManager.getPower(card.powerId), instanceId: card.instanceId })),
         abilityCharges: privateCards.abilityCharges,
+        votersToPlace: privateCards.votersToPlace,
         reserveVoters: privateCards.reserveVoters,
         nextTurn: privateCards.nextTurn,
         intel: privateCards.intel,
       },
     };
+  }
+
+  /** Rewards and ideologies of each answer are secret — players must guess. */
+  private toPublicDecision(cardId: string) {
+    const { id, topic, question } = this.cardManager.getDecision(cardId);
+    return { id, topic, question };
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -443,6 +463,7 @@ export class GameEngine {
       sealedCards: [],
       ideologyProfile: { ...EMPTY_RESOURCES },
       abilityCharges: { ...EMPTY_RESOURCES },
+      votersToPlace: 0,
       reserveVoters: 0,
       votersShielded: false,
       nextTurn: { skipQuestion: false, voterPurchaseBlocked: false, sealedUseBlocked: false, voterSurcharge: 0 },
@@ -484,7 +505,7 @@ export class GameEngine {
       }
       this.boardManager.recalculateControl(constituency);
       const names = returned.map(([playerId, count]) => `${this.name(game, playerId)} (${count})`).join(", ");
-      this.log(game, "MAJORITY", `HUNG VERDICT in ${constituency.name}: all seats filled but no majority. Re-poll — voters returned to reserve: ${names}.`);
+      this.log(game, "MAJORITY", `HUNG VERDICT in ${constituency.name}: all seats filled but no majority. Re-poll — voters evicted back to reserve: ${names}.`);
     }
   }
 
@@ -516,7 +537,7 @@ export class GameEngine {
       case "ideologyLeaderVoters": {
         const best = Math.max(...all.map(({ cards }) => cards.ideologyProfile[effect.ideology]));
         if (best > 0) {
-          for (const { cards } of all) if (cards.ideologyProfile[effect.ideology] === best) cards.reserveVoters += effect.voters;
+          for (const { cards } of all) if (cards.ideologyProfile[effect.ideology] === best) cards.votersToPlace += effect.voters;
         }
         break;
       }
@@ -529,7 +550,7 @@ export class GameEngine {
       case "underdogVoters": {
         const totals = all.map(({ player, cards }) => ({ cards, total: this.boardManager.totalVoters(game.board, player.id) }));
         const lowest = Math.min(...totals.map((entry) => entry.total));
-        for (const entry of totals) if (entry.total === lowest) entry.cards.reserveVoters += effect.voters;
+        for (const entry of totals) if (entry.total === lowest) entry.cards.votersToPlace += effect.voters;
         break;
       }
       case "modifier":
@@ -618,11 +639,24 @@ export class GameEngine {
     if (game.currentPlayerId !== playerId) throw new GameEngineError("It is not your turn.");
   }
 
-  private assertActionPhase(game: GameState, playerId: string) {
+  private assertActionPhase(game: GameState, playerId: string, options: { allowWhilePlacing?: boolean } = {}) {
     this.assertActivePlayer(game, playerId);
     if (game.phase !== "ACTION_PHASE" || !game.turnState.decisionMade) {
       throw new GameEngineError("Answer the political question first.");
     }
+    if (!options.allowWhilePlacing && this.mustPlaceNow(game, playerId)) {
+      const count = this.getPlayerCards(game, playerId).votersToPlace;
+      throw new GameEngineError(`Place your ${count} new voter${count === 1 ? "" : "s"} on the board first.`);
+    }
+  }
+
+  /** New voters must be placed before anything else — unless there is no legal seat anywhere. */
+  private mustPlaceNow(game: GameState, playerId: string) {
+    return this.getPlayerCards(game, playerId).votersToPlace > 0 && this.hasOpenSeat(game);
+  }
+
+  private hasOpenSeat(game: GameState) {
+    return game.board.some((constituency) => constituency.totalVoters < constituency.seats && !constituency.lockedByPlayerId);
   }
 
   private getPlayerCards(game: GameState, playerId: string) {

@@ -54,8 +54,8 @@ export class PowerResolver {
         this.resources.spend(actor.resources, gift);
         const received = this.resources.award(this.cardsOf(game, target).resources, gift);
         const given = this.resources.getTotal(gift);
-        actor.reserveVoters += given;
-        return this.outcome(`donated ${this.resources.getTotal(received)} resource(s) to ${this.name(game, target)} and gained ${given} reserve voter(s)`);
+        actor.votersToPlace += given;
+        return this.outcome(`donated ${this.resources.getTotal(received)} resource(s) to ${this.name(game, target)} and gained ${given} new voter(s)`);
       }
       case "policy-u-turn": {
         const from = this.ideology(params.resourceType, "Choose the ideology to convert from.");
@@ -100,8 +100,8 @@ export class PowerResolver {
       }
       case "volunteer-army":
       case "ability-idealism": {
-        actor.reserveVoters += 3;
-        return this.outcome("gained 3 reserve voters");
+        actor.votersToPlace += 3;
+        return this.outcome("gained 3 new voters");
       }
       case "defection": {
         const target = this.rival(game, actorId, params.targetPlayerId);
@@ -125,7 +125,8 @@ export class PowerResolver {
         if (constituency.controllingPlayerId) throw new PowerError(`${constituency.name} already has a majority. Choose a constituency without one.`);
         this.assertCanAffect(game, actorId, constituency, target);
         const removed = this.board.removeVoters(game.board, constituency.id, target, limit);
-        return this.outcome(`removed ${removed} of ${this.name(game, target)}'s voters from ${constituency.name}`, [constituency.id]);
+        this.cardsOf(game, target).reserveVoters += removed;
+        return this.outcome(`evicted ${removed} of ${this.name(game, target)}'s voters from ${constituency.name} (sent to their reserve)`, [constituency.id]);
       }
       case "transfer-order": {
         const from = this.board.getConstituency(game.board, params.constituencyId);
