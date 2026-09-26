@@ -1,42 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import type { Constituency, GamePlayer } from "../types";
+import { BOARD_CONSTITUENCIES } from "../constants/board";
+import { BoardManager } from "./BoardManager";
 import { ElectionManager } from "./ElectionManager";
 
-const players: GamePlayer[] = [
-  { id: "asha", username: "Asha", isConnected: true },
-  { id: "bharat", username: "Bharat", isConnected: true },
-  { id: "chandra", username: "Chandra", isConnected: true },
-];
-
-const board: Constituency[] = [
-  { id: "north", name: "North", region: "North", electoralWeight: 5, adjacentConstituencyIds: [], voterCounts: {}, totalVoters: 0, controllingPlayerId: "asha" },
-  { id: "south", name: "South", region: "South", electoralWeight: 3, adjacentConstituencyIds: [], voterCounts: {}, totalVoters: 0, controllingPlayerId: "bharat" },
-  { id: "east", name: "East", region: "East", electoralWeight: 4, adjacentConstituencyIds: [], voterCounts: {}, totalVoters: 0, controllingPlayerId: "asha" },
-  { id: "west", name: "West", region: "West", electoralWeight: 2, adjacentConstituencyIds: [], voterCounts: {}, totalVoters: 0 },
-];
-
 describe("ElectionManager", () => {
-  it("scores controlled constituency weights and ranks players", () => {
-    const results = new ElectionManager().calculate(board, players);
-
-    expect(results.standings).toEqual([
-      { playerId: "asha", constituenciesControlled: 2, weightConstituenciesControlled: 9 },
-      { playerId: "bharat", constituenciesControlled: 1, weightConstituenciesControlled: 3 },
-      { playerId: "chandra", constituenciesControlled: 0, weightConstituenciesControlled: 0 },
+  it("ranks by seats won, then total voters", () => {
+    const boardManager = new BoardManager(BOARD_CONSTITUENCIES);
+    const board = boardManager.createBoard(["a", "b"]);
+    boardManager.addVoters(board, "madhyanagar", "a", 8); // 15 seats
+    boardManager.addVoters(board, "gangapur-valley", "b", 6); // 11 seats
+    boardManager.addVoters(board, "himvant-hills", "b", 4); // 7 seats
+    const results = new ElectionManager().calculate(board, [
+      { id: "a", username: "A", isConnected: true },
+      { id: "b", username: "B", isConnected: true },
     ]);
-    expect(results.winnerPlayerIds).toEqual(["asha"]);
-    expect(results.isTie).toBe(false);
-  });
-
-  it("recognizes a tied mandate", () => {
-    const tiedBoard = board.map((constituency) => ({ ...constituency }));
-    tiedBoard[1].controllingPlayerId = "bharat";
-    tiedBoard[2].controllingPlayerId = undefined;
-    tiedBoard[3].controllingPlayerId = "bharat";
-
-    const results = new ElectionManager().calculate(tiedBoard, players);
-    expect(results.winnerPlayerIds).toEqual(["bharat", "asha"]);
-    expect(results.isTie).toBe(true);
+    expect(results.winnerPlayerIds).toEqual(["b"]);
+    expect(results.standings[0]).toMatchObject({ playerId: "b", seatsWon: 18, constituenciesControlled: 2, totalVoters: 10 });
   });
 });

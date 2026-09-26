@@ -4,9 +4,16 @@ import { LandingActions } from "@/components/landing/landing-actions";
 import { Button } from "@/components/ui/button";
 
 const principles = [
-  { icon: Scale, label: "Choose a position", detail: "Every dilemma has a political cost." },
-  { icon: Users, label: "Win voters", detail: "Build local majorities one constituency at a time." },
-  { icon: Landmark, label: "Claim the mandate", detail: "Turn influence into electoral control." },
+  { icon: Scale, label: "Answer the question", detail: "Each turn, answer a Yes/No political question. Your answer earns 4 resources of different ideologies." },
+  { icon: Users, label: "Buy voters & sealed cards", detail: "Spend resources on as many voter cards and sealed powers as you can afford, then place voters on the map." },
+  { icon: Landmark, label: "Win every majority", detail: "A majority means MORE than half of a constituency's seats. The election ends when every constituency has one." },
+];
+
+const ideologies = [
+  { label: "Capitalism", color: "#2f9e57", detail: "Markets, business & growth" },
+  { label: "Idealism", color: "#e3b928", detail: "Ethics, welfare & transparency" },
+  { label: "Conservatism", color: "#e0761f", detail: "Religion, community & tradition" },
+  { label: "Supremacy", color: "#8c1d2f", detail: "Strong state, order & national pride" },
 ];
 
 export default function HomePage() {
@@ -66,6 +73,20 @@ export default function HomePage() {
               </article>
             ))}
           </div>
+          <div className="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {ideologies.map((ideology) => (
+              <div key={ideology.label} className="flex items-center gap-3 border border-white/[0.08] bg-[#0b111d]/70 px-4 py-3">
+                <span className="size-3 rounded-full" style={{ backgroundColor: ideology.color }} />
+                <span>
+                  <span className="block text-sm font-semibold text-white">{ideology.label}</span>
+                  <span className="block text-xs text-[#8d9aab]">{ideology.detail}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-5 text-xs leading-6 text-[#8d9aab]">
+            Gerrymandering: once per turn, move one voter from a constituency where you have the most voters to an adjacent one. Sealed cards cost any 4 resources and stay secret until you play them.
+          </p>
         </section>
       </div>
     </main>

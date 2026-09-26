@@ -1,5 +1,6 @@
 import type { GameView } from "../../game/types/game";
-import type { ResourceType } from "../../game/types/resources";
+import type { ResourceType, Resources } from "../../game/types/resources";
+import type { PowerParams } from "../../game/types/cards";
 import type { LobbyRoom } from "../../game/types/lobby";
 
 export interface CreateRoomPayload {
@@ -28,26 +29,36 @@ export interface BuyVoterPayload extends RoomActionPayload {
   voterCardId: string;
 }
 
-export interface PlaceInfluencePayload extends RoomActionPayload {
+export interface RefreshVoterMarketPayload extends RoomActionPayload {
+  /** Exactly 1 resource to discard. */
+  discard: Partial<Resources>;
+}
+
+export interface PlaceVotersPayload extends RoomActionPayload {
   constituencyId: string;
   count: number;
 }
 
-export interface UsePowerPayload extends RoomActionPayload {
-  powerCardId: string;
-  targetPlayerId?: string;
-  constituencyId?: string;
+export interface BuySealedCardPayload extends RoomActionPayload {
+  instanceId: string;
+  /** Exactly 4 resources of any mix, e.g. { capitalism: 2, idealism: 1, supremacy: 1 }. */
+  payment: Partial<Resources>;
 }
 
-export interface UseResourceAbilityPayload extends RoomActionPayload {
-  resourceType: ResourceType;
-  targetPlayerId?: string;
-  constituencyId?: string;
+export interface UseSealedCardPayload extends RoomActionPayload {
+  instanceId: string;
+  params: PowerParams;
 }
 
-export interface ShiftMajorityVoterPayload extends RoomActionPayload {
+export interface UseAbilityPayload extends RoomActionPayload {
+  ideology: ResourceType;
+  params: PowerParams;
+}
+
+export interface GerrymanderPayload extends RoomActionPayload {
   fromConstituencyId: string;
   toConstituencyId: string;
+  voterOwnerId: string;
 }
 
 export interface RoomSession {
@@ -73,11 +84,12 @@ export interface ClientToServerEvents {
   endTurn: (payload: RoomActionPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
   makeDecision: (payload: MakeDecisionPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
   buyVoter: (payload: BuyVoterPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
-  placeInfluence: (payload: PlaceInfluencePayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
-  buyPower: (payload: RoomActionPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
-  usePower: (payload: UsePowerPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
-  useResourceAbility: (payload: UseResourceAbilityPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
-  shiftMajorityVoter: (payload: ShiftMajorityVoterPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  refreshVoterMarket: (payload: RefreshVoterMarketPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  placeVoters: (payload: PlaceVotersPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  buySealedCard: (payload: BuySealedCardPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  useSealedCard: (payload: UseSealedCardPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  useAbility: (payload: UseAbilityPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
+  gerrymander: (payload: GerrymanderPayload, acknowledgement: SocketAcknowledgement<GameView>) => void;
 }
 
 export interface ServerToClientEvents {

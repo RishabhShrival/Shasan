@@ -4,3 +4,4 @@ export * from "./BoardManager";
 export * from "./CardManager";
 export * from "./ResourceManager";
 export * from "./ElectionManager";
+export * from "./PowerResolver";

@@ -1,23 +1,26 @@
 import { describe, expect, it } from "vitest";
 
-import { ResourceManager, ResourceManagerError } from "./ResourceManager";
+import { EMPTY_RESOURCES } from "../types";
+import { ResourceManager } from "./ResourceManager";
 
 describe("ResourceManager", () => {
-  it("awards resources in order without exceeding the twelve-resource cap", () => {
-    const manager = new ResourceManager();
-    const resources = { capitalism: 10, communism: 0, socialism: 0, fascism: 0 };
+  const manager = new ResourceManager(12);
 
-    const awarded = manager.award(resources, { capitalism: 2, communism: 1, socialism: 1, fascism: 0 });
-    expect(awarded).toEqual({ capitalism: 2, communism: 0, socialism: 0, fascism: 0 });
-    expect(manager.getTotal(resources)).toBe(12);
+  it("caps awards at the holding limit", () => {
+    const stock = { ...EMPTY_RESOURCES, capitalism: 10 };
+    const awarded = manager.award(stock, { ...EMPTY_RESOURCES, idealism: 4 });
+    expect(awarded.idealism).toBe(2);
+    expect(manager.getTotal(stock)).toBe(12);
   });
 
-  it("spends only affordable resource bundles", () => {
-    const manager = new ResourceManager();
-    const resources = { capitalism: 2, communism: 1, socialism: 0, fascism: 0 };
+  it("validates a client resource selection", () => {
+    expect(manager.parseSelection({ capitalism: 2, supremacy: 2 }, { exactly: 4 })).toEqual({ ...EMPTY_RESOURCES, capitalism: 2, supremacy: 2 });
+    expect(() => manager.parseSelection({ capitalism: 3 }, { exactly: 4 })).toThrow("exactly 4");
+    expect(() => manager.parseSelection({ capitalism: -1 }, {})).toThrow();
+    expect(() => manager.parseSelection({ communism: 4 }, {})).toThrow("Unknown resource");
+  });
 
-    manager.spend(resources, { capitalism: 1, communism: 1, socialism: 0, fascism: 0 });
-    expect(resources).toEqual({ capitalism: 1, communism: 0, socialism: 0, fascism: 0 });
-    expect(() => manager.spend(resources, { capitalism: 2, communism: 0, socialism: 0, fascism: 0 })).toThrow(ResourceManagerError);
+  it("discounts the largest costs first", () => {
+    expect(manager.discount({ capitalism: 2, idealism: 1, conservatism: 1, supremacy: 1 }, 2)).toEqual({ capitalism: 0, idealism: 1, conservatism: 1, supremacy: 1 });
   });
 });

@@ -1,8 +1,12 @@
 import { GameEngine, type GameEngineDependencies } from "../game/engine/GameEngine";
-import type { GameState, GameView, LobbyRoom, ResourceType } from "../game/types";
+import type { GameState, GameView, LobbyRoom, PowerParams, ResourceType } from "../game/types";
 
 export class GameManagerError extends Error {}
 
+/**
+ * Stores active games in memory. Swap the Map for Redis/PostgreSQL later
+ * without touching the rules engine.
+ */
 export class GameManager {
   private readonly games = new Map<string, GameState>();
   private readonly engine: GameEngine;
@@ -12,90 +16,58 @@ export class GameManager {
   }
 
   createGame(lobby: LobbyRoom) {
-    if (this.games.has(lobby.code)) {
-      throw new GameManagerError("A game already exists for this room.");
-    }
-
+    if (this.games.has(lobby.code)) throw new GameManagerError("A game already exists for this room.");
     const game = this.engine.createGame({
       roomCode: lobby.code,
-      players: lobby.players.map((player) => ({
-        id: player.id,
-        username: player.username,
-        isConnected: player.isConnected,
-      })),
+      players: lobby.players.map((player) => ({ id: player.id, username: player.username, isConnected: player.isConnected })),
     });
     this.games.set(lobby.code, game);
     return this.engine.snapshot(game);
   }
 
   getGameForPlayer(roomCode: string, playerId: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    return this.engine.createView(game, playerId);
+    return this.run(roomCode, playerId, () => undefined);
   }
 
   endTurn(roomCode: string, playerId: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.endTurn(game, playerId);
-    return this.engine.createView(game, playerId);
+    return this.run(roomCode, playerId, (game) => this.engine.endTurn(game, playerId));
   }
 
   makeDecision(roomCode: string, playerId: string, choice: "Yes" | "No") {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.makeDecision(game, playerId, choice);
-    return this.engine.createView(game, playerId);
+    return this.run(roomCode, playerId, (game) => this.engine.makeDecision(game, playerId, choice));
   }
 
   buyVoter(roomCode: string, playerId: string, voterCardId: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.buyVoter(game, playerId, voterCardId);
-    return this.engine.createView(game, playerId);
+    return this.run(roomCode, playerId, (game) => this.engine.buyVoter(game, playerId, voterCardId));
   }
 
-  placeInfluence(roomCode: string, playerId: string, constituencyId: string, count: number) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.placeInfluence(game, playerId, constituencyId, count);
-    return this.engine.createView(game, playerId);
+  refreshVoterMarket(roomCode: string, playerId: string, discard: unknown) {
+    return this.run(roomCode, playerId, (game) => this.engine.refreshVoterMarket(game, playerId, discard));
   }
 
-  buyPower(roomCode: string, playerId: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.buyPower(game, playerId);
-    return this.engine.createView(game, playerId);
+  placeVoters(roomCode: string, playerId: string, constituencyId: string, count: number) {
+    return this.run(roomCode, playerId, (game) => this.engine.placeVoters(game, playerId, constituencyId, count));
   }
 
-  usePower(roomCode: string, playerId: string, powerCardId: string, targetPlayerId?: string, constituencyId?: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.usePower(game, playerId, powerCardId, targetPlayerId, constituencyId);
-    return this.engine.createView(game, playerId);
+  buySealedCard(roomCode: string, playerId: string, instanceId: string, payment: unknown) {
+    return this.run(roomCode, playerId, (game) => this.engine.buySealedCard(game, playerId, instanceId, payment));
   }
 
-  useResourceAbility(roomCode: string, playerId: string, resourceType: ResourceType, targetPlayerId?: string, constituencyId?: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.useResourceAbility(game, playerId, resourceType, targetPlayerId, constituencyId);
-    return this.engine.createView(game, playerId);
+  useSealedCard(roomCode: string, playerId: string, instanceId: string, params: PowerParams) {
+    return this.run(roomCode, playerId, (game) => this.engine.useSealedCard(game, playerId, instanceId, params));
   }
 
-  shiftMajorityVoter(roomCode: string, playerId: string, fromConstituencyId: string, toConstituencyId: string) {
-    const game = this.getStoredGame(roomCode);
-    this.assertGamePlayer(game, playerId);
-    this.engine.shiftMajorityVoter(game, playerId, fromConstituencyId, toConstituencyId);
-    return this.engine.createView(game, playerId);
+  useAbility(roomCode: string, playerId: string, ideology: ResourceType, params: PowerParams) {
+    return this.run(roomCode, playerId, (game) => this.engine.useAbility(game, playerId, ideology, params));
+  }
+
+  gerrymander(roomCode: string, playerId: string, fromConstituencyId: string, toConstituencyId: string, voterOwnerId: string) {
+    return this.run(roomCode, playerId, (game) => this.engine.gerrymander(game, playerId, fromConstituencyId, toConstituencyId, voterOwnerId));
   }
 
   setPlayerConnection(roomCode: string, playerId: string, isConnected: boolean) {
     const game = this.games.get(roomCode);
-    if (!game) {
-      return undefined;
-    }
-
+    if (!game) return undefined;
     this.assertGamePlayer(game, playerId);
     this.engine.setPlayerConnection(game, playerId, isConnected);
     return this.engine.snapshot(game);
@@ -114,18 +86,20 @@ export class GameManager {
     return this.games.has(roomCode);
   }
 
+  private run(roomCode: string, playerId: string, action: (game: GameState) => unknown) {
+    const game = this.getStoredGame(roomCode);
+    this.assertGamePlayer(game, playerId);
+    action(game);
+    return this.engine.createView(game, playerId);
+  }
+
   private getStoredGame(roomCode: string) {
     const game = this.games.get(roomCode);
-    if (!game) {
-      throw new GameManagerError("This game has not started yet.");
-    }
-
+    if (!game) throw new GameManagerError("This game has not started yet.");
     return game;
   }
 
   private assertGamePlayer(game: GameState, playerId: string) {
-    if (!game.players.some((player) => player.id === playerId)) {
-      throw new GameManagerError("You are not part of this game.");
-    }
+    if (!game.players.some((player) => player.id === playerId)) throw new GameManagerError("You are not part of this game.");
   }
 }

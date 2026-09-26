@@ -1,147 +1,237 @@
 import { describe, expect, it } from "vitest";
 
-import { GameEngine, GameEngineError } from "./GameEngine";
+import { POWER_CARDS } from "../cards";
+import { EMPTY_RESOURCES, type GameState, type Resources } from "../types";
+import { GameEngine } from "./GameEngine";
 
 const players = [
-  { id: "player-a", username: "Asha", isConnected: true },
-  { id: "player-b", username: "Bharat", isConnected: true },
+  { id: "a", username: "Rishabh", isConnected: true },
+  { id: "b", username: "Aditya", isConnected: true },
+  { id: "c", username: "Avisha", isConnected: true },
 ];
 
-function createEngine(maxRounds = 2) {
-  let id = 0;
-  let timestamp = 1_000;
-
-  return new GameEngine(
-    { maxRounds },
-    {
-      createId: () => `id-${++id}`,
-      now: () => ++timestamp,
-    },
-  );
+function seeded(seed = 7) {
+  let value = seed;
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
 }
 
-function completeTurn(engine: GameEngine, game: ReturnType<GameEngine["createGame"]>, playerId: string) {
-  engine.makeDecision(game, playerId, "Yes");
-  engine.endTurn(game, playerId);
+function setup() {
+  let id = 0;
+  let time = 1_000;
+  const engine = new GameEngine({}, { createId: () => `id-${++id}`, now: () => ++time, random: seeded() });
+  const game = engine.createGame({ roomCode: "THRONE", players });
+  return { engine, game };
+}
+
+function give(game: GameState, playerId: string, resources: Partial<Resources>) {
+  game.playerCards[playerId].resources = { ...EMPTY_RESOURCES, ...resources };
+}
+
+function place(game: GameState, constituencyId: string, counts: Record<string, number>) {
+  const area = game.board.find((candidate) => candidate.id === constituencyId)!;
+  for (const [playerId, count] of Object.entries(counts)) area.voterCounts[playerId] = count;
+  area.totalVoters = Object.values(area.voterCounts).reduce((sum, count) => sum + count, 0);
+  const holder = Object.entries(area.voterCounts).find(([, count]) => count > area.seats / 2);
+  area.controllingPlayerId = holder?.[0];
 }
 
 describe("GameEngine", () => {
-  it("creates a serializable game with the first player in the decision phase", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-
-    expect(game).toMatchObject({
-      roomCode: "THRONE",
-      status: "PLAYING",
-      currentPlayerId: "player-a",
-      currentRound: 1,
-      maxRounds: 2,
-      phase: "POLITICAL_DECISION",
-    });
-    expect(game.actionLog[0].type).toBe("GAME_STARTED");
+  it("starts in the political decision phase with 3 voter cards and 3 sealed cards on the market", () => {
+    const { game } = setup();
+    expect(game.phase).toBe("POLITICAL_DECISION");
+    expect(game.voterMarket).toHaveLength(3);
+    expect(game.sealedMarket).toHaveLength(3);
+    expect(game.currentDecisionCardId).toBeDefined();
   });
 
-  it("rejects a player attempting to end someone else's turn", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-
-    expect(() => engine.endTurn(game, "player-b")).toThrow("It is not your turn.");
-    expect(game.currentPlayerId).toBe("player-a");
+  it("starts players with 1 of each ideology and awards 4 more for an answer", () => {
+    const { engine, game } = setup();
+    expect(game.playerCards.a.resources).toEqual({ capitalism: 1, idealism: 1, conservatism: 1, supremacy: 1 });
+    engine.makeDecision(game, "a", "Yes");
+    const total = Object.values(game.playerCards.a.resources).reduce((sum, value) => sum + value, 0);
+    expect(total).toBe(8);
+    expect(game.phase).toBe("ACTION_PHASE");
   });
 
-  it("advances turn order, rounds, and finally enters election results", () => {
-    const engine = createEngine(2);
-    const game = engine.createGame({ roomCode: "THRONE", players });
+  it("lets a player buy several voter cards in one turn and refills the same slot immediately", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    give(game, "a", { capitalism: 6, idealism: 6 });
+    // Make every market card affordable.
+    game.voterMarket = ["chai-stall-chat", "rti-volunteers", "startup-meetup"];
+    game.voterDeck = game.voterDeck.filter((id) => !game.voterMarket.includes(id));
 
-    completeTurn(engine, game, "player-a");
-    expect(game.currentPlayerId).toBe("player-b");
-    expect(game.currentRound).toBe(1);
+    engine.buyVoter(game, "a", "rti-volunteers");
+    expect(game.voterMarket).toHaveLength(3);
+    expect(game.voterMarket[0]).toBe("chai-stall-chat");
+    expect(game.voterMarket[1]).not.toBe("rti-volunteers");
+    expect(game.voterMarket[2]).toBe("startup-meetup");
 
-    completeTurn(engine, game, "player-b");
-    expect(game.currentPlayerId).toBe("player-a");
-    expect(game.currentRound).toBe(2);
+    engine.buyVoter(game, "a", "chai-stall-chat");
+    engine.buyVoter(game, "a", "startup-meetup");
+    expect(game.playerCards.a.reserveVoters).toBe(4);
+    expect(game.currentPlayerId).toBe("a");
+  });
 
-    completeTurn(engine, game, "player-a");
-    completeTurn(engine, game, "player-b");
+  it("sells sealed cards for ANY 4 owned resources and validates the payment", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    give(game, "a", { capitalism: 1, supremacy: 3, idealism: 2 });
+    const slot = game.sealedMarket[1];
+
+    expect(() => engine.buySealedCard(game, "a", slot.instanceId, { supremacy: 3 })).toThrow("exactly 4");
+    expect(() => engine.buySealedCard(game, "a", slot.instanceId, { capitalism: 4 })).toThrow("do not own");
+    expect(() => engine.buySealedCard(game, "a", slot.instanceId, { socialism: 4 })).toThrow("Unknown resource");
+
+    engine.buySealedCard(game, "a", slot.instanceId, { capitalism: 1, supremacy: 3 });
+    expect(game.playerCards.a.resources).toEqual({ ...EMPTY_RESOURCES, idealism: 2 });
+    expect(game.playerCards.a.sealedCards.map((card) => card.instanceId)).toContain(slot.instanceId);
+    expect(game.sealedMarket).toHaveLength(3);
+    expect(game.sealedMarket[1].instanceId).not.toBe(slot.instanceId);
+
+    // Players may hold several sealed cards.
+    give(game, "a", { idealism: 8 });
+    engine.buySealedCard(game, "a", game.sealedMarket[0].instanceId, { idealism: 4 });
+    engine.buySealedCard(game, "a", game.sealedMarket[2].instanceId, { idealism: 4 });
+    expect(game.playerCards.a.sealedCards).toHaveLength(3);
+  });
+
+  it("lets a player refresh the voter market once per turn for 1 resource", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    give(game, "a", { capitalism: 2 });
+    const before = [...game.voterMarket];
+    engine.refreshVoterMarket(game, "a", { capitalism: 1 });
+    expect(game.playerCards.a.resources.capitalism).toBe(1);
+    expect(game.voterMarket).toHaveLength(3);
+    expect(game.voterMarket.some((id) => before.includes(id))).toBe(false);
+    expect(() => engine.refreshVoterMarket(game, "a", { capitalism: 1 })).toThrow("already refreshed");
+  });
+
+  it("hides rivals' resources and sealed cards from the player view", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    give(game, "a", { idealism: 4 });
+    engine.buySealedCard(game, "a", game.sealedMarket[0].instanceId, { idealism: 4 });
+    const view = engine.createView(game, "b");
+    const json = JSON.stringify(view);
+    expect(json).not.toContain("decisionDeck");
+    expect(view.yourCards.sealedCards).toHaveLength(0);
+    expect(view.playerStats.find((stats) => stats.playerId === "a")?.sealedCardCount).toBe(1);
+    expect(view.sealedMarket[0]).not.toHaveProperty("powerId");
+  });
+
+  it("allows gerrymandering only where the player has the most voters, to an adjacent constituency, once per turn", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    place(game, "himvant-hills", { a: 3, b: 2, c: 1 });
+    place(game, "marudhar-plains", { a: 1, b: 4 });
+
+    expect(() => engine.gerrymander(game, "a", "marudhar-plains", "himvant-hills", "b")).toThrow("highest number of voters");
+    expect(() => engine.gerrymander(game, "a", "himvant-hills", "kaveri-delta", "b")).toThrow("adjacent");
+
+    engine.gerrymander(game, "a", "himvant-hills", "gangapur-valley", "b");
+    expect(game.board.find((area) => area.id === "himvant-hills")?.voterCounts.b).toBe(1);
+    expect(game.board.find((area) => area.id === "gangapur-valley")?.voterCounts.b).toBe(1);
+
+    expect(() => engine.gerrymander(game, "a", "himvant-hills", "gangapur-valley", "c")).toThrow("already gerrymandered");
+  });
+
+  it("does not change anything when an action is rejected", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    const before = JSON.stringify(game);
+    expect(() => engine.placeVoters(game, "a", "himvant-hills", 3)).toThrow();
+    expect(JSON.stringify(game)).toBe(before);
+  });
+
+  it("ends the game only when EVERY constituency has a majority", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    const [last, ...rest] = game.board;
+    for (const area of rest) place(game, area.id, { b: Math.floor(area.seats / 2) + 1 });
+    place(game, last.id, { a: 3 }); // 3 of 7 — not yet a majority
+    game.playerCards.a.reserveVoters = 1;
+    expect(game.status).toBe("PLAYING");
+
+    engine.placeVoters(game, "a", last.id, 1); // 4 of 7
     expect(game.status).toBe("FINISHED");
     expect(game.phase).toBe("ELECTION_RESULTS");
-    expect(game.actionLog.at(-1)?.type).toBe("GAME_FINISHED");
-    expect(game.electionResults?.standings).toHaveLength(2);
-    expect(game.electionResults?.winnerPlayerIds).toHaveLength(2);
+    expect(game.electionResults?.winnerPlayerIds).toEqual(["b"]);
   });
 
-  it("does not expose internal state through snapshots", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-    const snapshot = engine.snapshot(game);
-
-    snapshot.players[0].username = "Changed";
-    expect(game.players[0].username).toBe("Asha");
+  it("re-polls a full constituency with no majority at the end of the turn", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    place(game, "madhyanagar", { a: 7, b: 7, c: 1 }); // 15 of 15, no majority
+    engine.endTurn(game, "a");
+    const area = game.board.find((candidate) => candidate.id === "madhyanagar")!;
+    expect(area.voterCounts).toEqual({ a: 7, b: 7, c: 0 });
+    expect(game.playerCards.c.reserveVoters).toBe(1);
+    expect(area.totalVoters).toBe(14);
   });
 
-  it("exposes the same shared voter market to every player", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-    const asAsha = engine.createView(game, "player-a");
-    const asBharat = engine.createView(game, "player-b");
-
-    expect(asAsha.currentDecision?.id).toBe(game.currentDecisionCardId);
-    expect(asAsha).not.toHaveProperty("decisionDeck");
-    expect(asAsha).not.toHaveProperty("playerCards");
-    expect(asAsha.yourCards.voterOffers).toHaveLength(3);
-    expect(asBharat.yourCards.voterOffers).toHaveLength(3);
-    expect(asAsha.yourCards.voterOffers.map((card) => card.id)).toEqual(game.voterOfferIds);
-    expect(asBharat.yourCards.voterOffers.map((card) => card.id)).toEqual(game.voterOfferIds);
-  });
-
-  it("requires between two and five unique players", () => {
-    const engine = createEngine();
-
-    expect(() => engine.createGame({ roomCode: "THRONE", players: [players[0]] })).toThrow(GameEngineError);
-    expect(() => engine.createGame({ roomCode: "THRONE", players: [...players, players[0]] })).toThrow(
-      "Each player in a game must have a unique id.",
-    );
-  });
-
-  it("removes purchased shared offers and lets voters be split between constituencies", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-    const playerCards = game.playerCards["player-a"];
-    const voterCardId = game.voterOfferIds[0];
-    playerCards.resources = { capitalism: 5, communism: 5, socialism: 5, fascism: 5 };
-
-    engine.makeDecision(game, "player-a", "Yes");
-    expect(game.phase).toBe("ACTION_PHASE");
-    expect(game.currentDecisionResolution?.playerId).toBe("player-a");
-
-    const voters = engine.createView(game, "player-a").yourCards.voterOffers.find((card) => card.id === voterCardId)?.voters;
-    engine.buyVoter(game, "player-a", voterCardId);
-    expect(game.phase).toBe("INFLUENCE");
-    expect(game.playerCards["player-a"].pendingVoters).toBe(voters);
-    expect(game.voterOfferIds).not.toContain(voterCardId);
-
-    engine.placeInfluence(game, "player-a", "aravali", 1);
-    if ((voters ?? 0) > 1) {
-      expect(game.phase).toBe("INFLUENCE");
-      engine.placeInfluence(game, "player-a", "gangetic", (voters ?? 0) - 1);
+  it("has no fixed number of rounds", () => {
+    const { engine, game } = setup();
+    for (let turn = 0; turn < 60; turn += 1) {
+      engine.makeDecision(game, game.currentPlayerId, turn % 2 ? "Yes" : "No");
+      engine.endTurn(game, game.currentPlayerId);
     }
-    expect(game.phase).toBe("ACTION_PHASE");
-    expect(game.board.find((area) => area.id === "aravali")?.voterCounts["player-a"]).toBe(1);
+    expect(game.status).toBe("PLAYING");
+    expect(game.currentRound).toBe(21);
+    expect(game.currentEventId).toBeDefined();
   });
 
-  it("allows one voter shift each turn only from a majority-controlled constituency", () => {
-    const engine = createEngine();
-    const game = engine.createGame({ roomCode: "THRONE", players });
-    const source = game.board.find((area) => area.id === "aravali");
-    if (!source) throw new Error("Expected Aravali constituency.");
-    source.voterCounts["player-a"] = 3;
-    source.voterCounts["player-b"] = 2;
-    engine.getBoardManager().recalculateControl(source);
+  it("cancels a sealed card aimed at a player holding a Stay Order", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    give(game, "b", { capitalism: 5 });
+    game.playerCards.a.sealedCards.push({ instanceId: "tax-raid#9", powerId: "tax-raid" });
+    game.playerCards.b.sealedCards.push({ instanceId: "stay-order#9", powerId: "stay-order" });
+    engine.useSealedCard(game, "a", "tax-raid#9", { targetPlayerId: "b" });
+    expect(game.playerCards.b.resources.capitalism).toBe(5);
+    expect(game.playerCards.b.sealedCards).toHaveLength(0);
+    expect(game.actionLog.at(-1)?.type).toBe("POWER_BLOCKED");
+  });
 
-    engine.makeDecision(game, "player-a", "Yes");
-    engine.shiftMajorityVoter(game, "player-a", "aravali", "gangetic");
-    expect(source.voterCounts["player-a"]).toBe(2);
-    expect(game.board.find((area) => area.id === "gangetic")?.voterCounts["player-a"]).toBe(1);
-    expect(() => engine.shiftMajorityVoter(game, "player-a", "aravali", "gangetic")).toThrow("each turn");
+  it("resolves every sealed power with valid inputs", () => {
+    for (const power of POWER_CARDS.filter((card) => !card.passive)) {
+      const { engine, game } = setup();
+      engine.makeDecision(game, "a", "Yes");
+      give(game, "a", { capitalism: 3, idealism: 3, conservatism: 1, supremacy: 1 });
+      give(game, "b", { capitalism: 3, idealism: 3 });
+      place(game, "madhyanagar", { a: 3, b: 3 });
+      place(game, "gangapur-valley", { a: 6 });
+      const instanceId = `${power.id}#test`;
+      game.playerCards.a.sealedCards.push({ instanceId, powerId: power.id });
+      const params = {
+        targetPlayerId: "b",
+        constituencyId: "madhyanagar",
+        destinationId: "dakshin-plateau",
+        resources: power.id === "clean-image" ? { capitalism: 2 } : power.id === "coalition-gift" ? { capitalism: 1 } : { idealism: 3 },
+        resourceType: "capitalism" as const,
+        secondResourceType: "supremacy" as const,
+      };
+      expect(() => engine.useSealedCard(game, "a", instanceId, params), power.id).not.toThrow();
+      expect(game.playerCards.a.sealedCards.some((card) => card.instanceId === instanceId)).toBe(false);
+    }
+  });
+
+  it("respects Security Cover and Section 144", () => {
+    const { engine, game } = setup();
+    engine.makeDecision(game, "a", "Yes");
+    place(game, "madhyanagar", { a: 2, b: 4 });
+    game.playerCards.a.sealedCards.push({ instanceId: "security-cover#9", powerId: "security-cover" }, { instanceId: "section-144#9", powerId: "section-144" });
+    engine.useSealedCard(game, "a", "security-cover#9", { constituencyId: "madhyanagar" });
+    engine.useSealedCard(game, "a", "section-144#9", { constituencyId: "himvant-hills" });
+    engine.endTurn(game, "a");
+
+    engine.makeDecision(game, "b", "Yes");
+    game.playerCards.b.reserveVoters = 2;
+    expect(() => engine.placeVoters(game, "b", "himvant-hills", 1)).toThrow("Section 144");
+    expect(() => engine.gerrymander(game, "b", "madhyanagar", "gangapur-valley", "a")).toThrow("Security Cover");
   });
 });

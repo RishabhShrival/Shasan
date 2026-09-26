@@ -3,23 +3,26 @@ import type { Constituency, ElectionResults, GamePlayer } from "../types";
 export class ElectionManager {
   calculate(board: Constituency[], players: GamePlayer[]): ElectionResults {
     const standings = players.map((player) => {
-      const controlledConstituencies = board.filter((constituency) => constituency.controllingPlayerId === player.id);
+      const controlled = board.filter((constituency) => constituency.controllingPlayerId === player.id);
       return {
         playerId: player.id,
-        constituenciesControlled: controlledConstituencies.length,
-        weightConstituenciesControlled: controlledConstituencies.reduce(
-          (total, constituency) => total + constituency.electoralWeight,
-          0,
-        ),
+        constituenciesControlled: controlled.length,
+        seatsWon: controlled.reduce((total, constituency) => total + constituency.seats, 0),
+        totalVoters: board.reduce((total, constituency) => total + (constituency.voterCounts[player.id] ?? 0), 0),
       };
     }).sort((left, right) =>
-      right.weightConstituenciesControlled - left.weightConstituenciesControlled ||
-      right.constituenciesControlled - left.constituenciesControlled ||
-      left.playerId.localeCompare(right.playerId),
+      right.seatsWon - left.seatsWon ||
+      right.totalVoters - left.totalVoters ||
+      right.constituenciesControlled - left.constituenciesControlled,
     );
 
-    const highestScore = standings[0]?.weightConstituenciesControlled ?? 0;
-    const winners = standings.filter((standing) => standing.weightConstituenciesControlled === highestScore);
+    const best = standings[0];
+    const winners = best
+      ? standings.filter((standing) =>
+        standing.seatsWon === best.seatsWon &&
+        standing.totalVoters === best.totalVoters &&
+        standing.constituenciesControlled === best.constituenciesControlled)
+      : [];
     return {
       standings,
       winnerPlayerIds: winners.map((standing) => standing.playerId),

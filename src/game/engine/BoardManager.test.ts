@@ -6,60 +6,48 @@ import { BoardManager, BoardManagerError } from "./BoardManager";
 describe("BoardManager", () => {
   const manager = new BoardManager(BOARD_CONSTITUENCIES);
 
-  it("creates serializable constituencies for every player without initial control", () => {
-    const board = manager.createBoard(["asha", "bharat"]);
-
-    expect(board).toHaveLength(9);
-    expect(board[0]).toMatchObject({
-      id: "aravali",
-      totalVoters: 0,
-      voterCounts: { asha: 0, bharat: 0 },
-      controllingPlayerId: undefined,
-    });
+  it("uses only odd seat counts between 5 and 20", () => {
+    for (const constituency of BOARD_CONSTITUENCIES) {
+      expect(constituency.seats % 2).toBe(1);
+      expect(constituency.seats).toBeGreaterThanOrEqual(5);
+      expect(constituency.seats).toBeLessThanOrEqual(20);
+    }
+    expect(() => new BoardManager([{ ...BOARD_CONSTITUENCIES[0], seats: 8, adjacentConstituencyIds: [] }])).toThrow(BoardManagerError);
   });
 
-  it("awards control only to an absolute majority and removes it on a tie", () => {
-    const board = manager.createBoard(["asha", "bharat"]);
+  it("requires more than half of all seats for a majority, not just the most voters", () => {
+    const board = manager.createBoard(["a", "b"]);
+    const valley = board.find((area) => area.id === "gangapur-valley")!; // 11 seats → majority 6
+    expect(valley.majorityThreshold).toBe(6);
 
-    manager.addVoters(board, "gangetic", "asha", 3);
-    expect(board.find((area) => area.id === "gangetic")?.controllingPlayerId).toBe("asha");
+    manager.addVoters(board, valley.id, "a", 5);
+    manager.addVoters(board, valley.id, "b", 1);
+    expect(valley.controllingPlayerId).toBeUndefined(); // most voters, but only 5 of 11
 
-    manager.addVoters(board, "gangetic", "bharat", 3);
-    const contested = board.find((area) => area.id === "gangetic");
-    expect(contested?.controllingPlayerId).toBeUndefined();
-    expect(contested?.totalVoters).toBe(6);
-
-    manager.addVoters(board, "gangetic", "asha", 2);
-    expect(contested?.controllingPlayerId).toBe("asha");
+    manager.addVoters(board, valley.id, "a", 1);
+    expect(valley.controllingPlayerId).toBe("a"); // 6 of 11
   });
 
-  it("requires more than half of all voters for control", () => {
-    const board = manager.createBoard(["asha", "bharat", "charu"]);
-
-    manager.addVoters(board, "gangetic", "asha", 2);
-    manager.addVoters(board, "gangetic", "bharat", 2);
-    manager.addVoters(board, "gangetic", "charu", 1);
-    expect(board.find((area) => area.id === "gangetic")?.controllingPlayerId).toBeUndefined();
-
-    manager.addVoters(board, "gangetic", "asha", 2);
-    expect(board.find((area) => area.id === "gangetic")?.controllingPlayerId).toBe("asha");
+  it("never lets a constituency hold more voters than seats", () => {
+    const board = manager.createBoard(["a", "b"]);
+    manager.addVoters(board, "meghpur-heights", "a", 5);
+    expect(() => manager.addVoters(board, "meghpur-heights", "b", 1)).toThrow("free seat");
   });
 
-  it("transfers one voter only between adjacent constituencies and recalculates control", () => {
-    const board = manager.createBoard(["asha", "bharat"]);
-    manager.addVoters(board, "aravali", "asha", 1);
-
-    manager.transferVoter(board, "aravali", "gangetic", "asha");
-    expect(board.find((area) => area.id === "aravali")?.totalVoters).toBe(0);
-    expect(board.find((area) => area.id === "gangetic")?.controllingPlayerId).toBe("asha");
-
-    expect(() => manager.transferVoter(board, "gangetic", "delta", "asha")).toThrow(BoardManagerError);
+  it("only moves voters between adjacent constituencies with free seats", () => {
+    const board = manager.createBoard(["a", "b"]);
+    manager.addVoters(board, "himvant-hills", "a", 2);
+    expect(() => manager.moveVoters(board, "himvant-hills", "kaveri-delta", "a", 1)).toThrow("adjacent");
+    manager.moveVoters(board, "himvant-hills", "gangapur-valley", "a", 1);
+    expect(board.find((area) => area.id === "gangapur-valley")?.voterCounts.a).toBe(1);
   });
 
-  it("rejects invalid voter changes", () => {
-    const board = manager.createBoard(["asha", "bharat"]);
-
-    expect(() => manager.addVoters(board, "aravali", "asha", 0)).toThrow("positive whole number");
-    expect(() => manager.addVoters(board, "aravali", "unknown", 1)).toThrow("not eligible");
+  it("detects a strict lead", () => {
+    const board = manager.createBoard(["a", "b"]);
+    const hills = board[0];
+    manager.addVoters(board, hills.id, "a", 2);
+    manager.addVoters(board, hills.id, "b", 2);
+    expect(manager.hasLead(hills, "a", false)).toBe(false);
+    expect(manager.hasLead(hills, "a", true)).toBe(true);
   });
 });

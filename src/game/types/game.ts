@@ -1,23 +1,29 @@
 import type { GamePlayer } from "./player";
 import type { Constituency } from "./board";
-import type { DecisionCard, PowerCard, VoterCard } from "./cards";
-import type { Resources } from "./resources";
-import type { ResourceType } from "./resources";
+import type { DecisionCard, EventCard, PowerCard, PowerCategory, RoundModifiers, SealedCardInstance, VoterCard } from "./cards";
+import type { ResourceType, Resources } from "./resources";
 import type { ElectionResults } from "./election";
 
 export type GameStatus = "PLAYING" | "FINISHED";
 
-export type GamePhase =
-  | "GAME_SETUP"
-  | "POLITICAL_DECISION"
-  | "ACTION_PHASE"
-  | "INFLUENCE"
-  | "EVENT"
-  | "NEXT_PLAYER"
-  | "ROUND_COMPLETE"
-  | "ELECTION_RESULTS";
+export type GamePhase = "POLITICAL_DECISION" | "ACTION_PHASE" | "ELECTION_RESULTS";
 
-export type GameLogType = "GAME_STARTED" | "TURN_ENDED" | "ROUND_STARTED" | "GAME_FINISHED" | "DECISION_MADE" | "VOTERS_PURCHASED" | "INFLUENCE_PLACED" | "POWER_PURCHASED" | "POWER_USED" | "RESOURCE_ABILITY_USED";
+export type GameLogType =
+  | "GAME_STARTED"
+  | "ROUND_STARTED"
+  | "EVENT"
+  | "TURN_ENDED"
+  | "TURN_SKIPPED"
+  | "DECISION_MADE"
+  | "VOTERS_PURCHASED"
+  | "VOTERS_PLACED"
+  | "GERRYMANDER"
+  | "POWER_PURCHASED"
+  | "POWER_USED"
+  | "POWER_BLOCKED"
+  | "ABILITY_USED"
+  | "MAJORITY"
+  | "GAME_FINISHED";
 
 export interface GameLog {
   id: string;
@@ -25,6 +31,58 @@ export interface GameLog {
   message: string;
   timestamp: number;
   playerId?: string;
+}
+
+/** Private intel revealed by the "Opinion Poll" power. Only the owner sees it. */
+export interface PrivateIntel {
+  targetPlayerId: string;
+  round: number;
+  resources: Resources;
+  sealedCardNames: string[];
+}
+
+export interface PlayerCardState {
+  resources: Resources;
+  sealedCards: SealedCardInstance[];
+  /** How many answers of each ideology this player has given. Public. */
+  ideologyProfile: Record<ResourceType, number>;
+  abilityCharges: Record<ResourceType, number>;
+  /** Voters bought but not yet placed on the board. */
+  reserveVoters: number;
+  /** Rivals cannot remove, convert or move this player's voters until their next turn starts. */
+  votersShielded: boolean;
+  /** Effects that apply during this player's NEXT turn. */
+  nextTurn: {
+    skipQuestion: boolean;
+    voterPurchaseBlocked: boolean;
+    sealedUseBlocked: boolean;
+    voterSurcharge: number;
+  };
+  intel?: PrivateIntel;
+}
+
+export interface DecisionResolution {
+  playerId: string;
+  cardId: string;
+  question: string;
+  choice: "Yes" | "No";
+  awarded: Resources;
+  dominantResource: ResourceType;
+}
+
+export interface TurnState {
+  decisionMade: boolean;
+  /** Extra questions the active player may still answer this turn. */
+  extraQuestions: number;
+  gerrymandersUsed: number;
+  gerrymandersAllowed: number;
+  /** Resources knocked off the next voter card bought this turn. */
+  voterDiscount: number;
+  voterPurchaseBlocked: boolean;
+  sealedUseBlocked: boolean;
+  voterSurcharge: number;
+  /** Whether the voter market was already refreshed this turn. */
+  voterMarketRefreshed: boolean;
 }
 
 export interface GameState {
@@ -37,53 +95,90 @@ export interface GameState {
   discardedDecisionCardIds: string[];
   currentDecisionCardId?: string;
   currentDecisionResolution?: DecisionResolution;
-  voterOfferIds: string[];
-  powerOfferId: string;
+  voterDeck: string[];
+  /** Always three slots. A bought slot is refilled immediately. */
+  voterMarket: string[];
+  voterDiscard: string[];
+  sealedDeck: SealedCardInstance[];
+  sealedMarket: SealedCardInstance[];
+  sealedDiscard: SealedCardInstance[];
+  eventDeck: string[];
+  currentEventId?: string;
   playerCards: Record<string, PlayerCardState>;
   turnState: TurnState;
   electionResults?: ElectionResults;
   currentPlayerId: string;
   currentRound: number;
-  maxRounds: number;
+  turnNumber: number;
   phase: GamePhase;
   actionLog: GameLog[];
   createdAt: number;
   updatedAt: number;
 }
 
-export interface PlayerCardState {
-  powerCardIds: string[];
-  resourceCards: Record<ResourceType, number>;
-  resourceAbilityCharges: Record<ResourceType, number>;
-  turnsToSkip: number;
-  resources: Resources;
-  pendingVoters: number;
-}
-
-export interface DecisionResolution {
+export interface PublicPlayerStats {
   playerId: string;
-  choice: "Yes" | "No";
-  awarded: Resources;
-  dominantResource: ResourceType;
+  totalVoters: number;
+  reserveVoters: number;
+  resourceCount: number;
+  sealedCardCount: number;
+  constituenciesControlled: number;
+  seatsControlled: number;
+  ideologyProfile: Record<ResourceType, number>;
+  votersShielded: boolean;
 }
 
-export interface TurnState {
-  decisionMade: boolean;
-  actionTaken: boolean;
-  majorityShiftTaken: boolean;
+export type PublicDecision = DecisionCard;
+
+export interface SealedMarketSlot {
+  instanceId: string;
+  category: PowerCategory;
 }
 
-export interface GameView extends Omit<GameState, "decisionDeck" | "discardedDecisionCardIds" | "currentDecisionCardId" | "playerCards" | "voterOfferIds" | "powerOfferId"> {
-  currentDecision?: Pick<DecisionCard, "id" | "title" | "scenario">;
-  powerOffer: PowerCard;
+export interface OwnedSealedCard extends PowerCard {
+  instanceId: string;
+}
+
+export interface GameView {
+  id: string;
+  roomCode: string;
+  status: GameStatus;
+  phase: GamePhase;
+  players: GamePlayer[];
+  board: Constituency[];
+  currentPlayerId: string;
+  currentRound: number;
+  turnNumber: number;
+  turnState: TurnState;
+  currentDecision?: PublicDecision;
+  currentDecisionResolution?: DecisionResolution;
+  currentEvent?: EventCard;
+  roundModifiers: RoundModifiers;
+  voterMarket: VoterCard[];
+  sealedMarket: SealedMarketSlot[];
+  sealedDeckCount: number;
+  playerStats: PublicPlayerStats[];
+  electionResults?: ElectionResults;
+  actionLog: GameLog[];
+  createdAt: number;
+  updatedAt: number;
+  rules: PublicRules;
   yourCards: {
-    voterOffers: VoterCard[];
-    powerCards: PowerCard[];
-    resourceCards: Record<ResourceType, number>;
-    resourceAbilityCharges: Record<ResourceType, number>;
     resources: Resources;
-    pendingVoters: number;
+    sealedCards: OwnedSealedCard[];
+    abilityCharges: Record<ResourceType, number>;
+    reserveVoters: number;
+    nextTurn: PlayerCardState["nextTurn"];
+    intel?: PrivateIntel;
   };
+}
+
+export interface PublicRules {
+  maxResources: number;
+  sealedCardPrice: number;
+  profileBonusEvery: number;
+  profileBonusAmount: number;
+  abilityEvery: number;
 }
 
 export interface CreateGameInput {
@@ -94,5 +189,21 @@ export interface CreateGameInput {
 export interface GameConfig {
   maxPlayers: number;
   minPlayers: number;
-  maxRounds: number;
+  /** Maximum resources a player may hold. */
+  maxResources: number;
+  /** Number of resources (any mix) paid for a sealed card. */
+  sealedCardPrice: number;
+  /** Gerrymanders allowed per turn. */
+  gerrymandersPerTurn: number;
+  /** When true, a player tied for the most voters may also gerrymander. */
+  gerrymanderAllowTiedLead: boolean;
+  /** Every N answers of the same ideology award `profileBonusAmount` resources of it. */
+  profileBonusEvery: number;
+  profileBonusAmount: number;
+  /** Every N answers of the same ideology unlock one ideology ability charge. */
+  abilityEvery: number;
+  /** Resources every player starts with (gives flexibility on the first turn). */
+  startingResources: Resources;
+  /** Copies of each sealed card in the deck. */
+  sealedCopies: number;
 }

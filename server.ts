@@ -4,12 +4,13 @@ import next from "next";
 import { Server } from "socket.io";
 
 import { GameManager } from "./src/server/GameManager";
-import type { GameState } from "./src/game/types";
+import type { GameState, GameView, PowerParams } from "./src/game/types";
 import { RoomManager, RoomManagerError } from "./src/server/RoomManager";
 import type {
   ClientToServerEvents,
   InterServerEvents,
   ServerToClientEvents,
+  SocketAcknowledgement,
   SocketData,
 } from "./src/server/socket/events";
 
@@ -64,6 +65,33 @@ void nextApp.prepare().then(() => {
       origin: development ? true : false,
     },
   });
+
+  type GameSocket = Parameters<Parameters<typeof io.on>[1]>[0];
+
+  /** Validates the session, runs one authoritative action and broadcasts personalised views. */
+  function handleGameAction(
+    socket: GameSocket,
+    roomCode: string,
+    acknowledgement: SocketAcknowledgement<GameView>,
+    action: (session: { roomCode: string; playerId: string }) => GameView,
+  ) {
+    try {
+      const session = getSession(socket, roomCode);
+      const gameView = action(session);
+      const game = gameManager.getGame(session.roomCode);
+      acknowledgement({ ok: true, data: gameView });
+      void broadcastGame(io, game);
+      if (game.status === "FINISHED") {
+        void io.in(game.roomCode).fetchSockets().then((sockets) => {
+          for (const recipient of sockets) {
+            if (recipient.data.playerId) recipient.emit("gameFinished", gameManager.createView(game, recipient.data.playerId));
+          }
+        });
+      }
+    } catch (error) {
+      acknowledgement({ ok: false, error: getErrorMessage(error) });
+    }
+  }
 
   io.on("connection", (socket) => {
     socket.on("createRoom", ({ username }, acknowledgement) => {
@@ -158,108 +186,41 @@ void nextApp.prepare().then(() => {
       }
     });
 
-    socket.on("endTurn", async ({ roomCode }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.endTurn(session.roomCode, session.playerId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-        if (game.status === "FINISHED") {
-          const sockets = await io.in(game.roomCode).fetchSockets();
-          for (const recipient of sockets) {
-            if (recipient.data.playerId) {
-              recipient.emit("gameFinished", gameManager.createView(game, recipient.data.playerId));
-            }
-          }
-        }
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("endTurn", ({ roomCode }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.endTurn(session.roomCode, session.playerId));
     });
 
     socket.on("makeDecision", ({ roomCode, choice }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.makeDecision(session.roomCode, session.playerId, choice);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.makeDecision(session.roomCode, session.playerId, choice));
     });
 
     socket.on("buyVoter", ({ roomCode, voterCardId }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.buyVoter(session.roomCode, session.playerId, voterCardId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.buyVoter(session.roomCode, session.playerId, voterCardId));
     });
 
-    socket.on("placeInfluence", ({ roomCode, constituencyId, count }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.placeInfluence(session.roomCode, session.playerId, constituencyId, count);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("refreshVoterMarket", ({ roomCode, discard }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.refreshVoterMarket(session.roomCode, session.playerId, discard));
     });
 
-    socket.on("buyPower", ({ roomCode }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.buyPower(session.roomCode, session.playerId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("placeVoters", ({ roomCode, constituencyId, count }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.placeVoters(session.roomCode, session.playerId, constituencyId, count));
     });
 
-    socket.on("usePower", ({ roomCode, powerCardId, targetPlayerId, constituencyId }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.usePower(session.roomCode, session.playerId, powerCardId, targetPlayerId, constituencyId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("buySealedCard", ({ roomCode, instanceId, payment }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.buySealedCard(session.roomCode, session.playerId, instanceId, payment));
     });
 
-    socket.on("useResourceAbility", ({ roomCode, resourceType, targetPlayerId, constituencyId }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.useResourceAbility(session.roomCode, session.playerId, resourceType, targetPlayerId, constituencyId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("useSealedCard", ({ roomCode, instanceId, params }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.useSealedCard(session.roomCode, session.playerId, instanceId, sanitizeParams(params)));
     });
 
-    socket.on("shiftMajorityVoter", ({ roomCode, fromConstituencyId, toConstituencyId }, acknowledgement) => {
-      try {
-        const session = getSession(socket, roomCode);
-        const gameView = gameManager.shiftMajorityVoter(session.roomCode, session.playerId, fromConstituencyId, toConstituencyId);
-        const game = gameManager.getGame(session.roomCode);
-        acknowledgement({ ok: true, data: gameView });
-        void broadcastGame(io, game);
-      } catch (error) {
-        acknowledgement({ ok: false, error: getErrorMessage(error) });
-      }
+    socket.on("useAbility", ({ roomCode, ideology, params }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) => gameManager.useAbility(session.roomCode, session.playerId, ideology, sanitizeParams(params)));
+    });
+
+    socket.on("gerrymander", ({ roomCode, fromConstituencyId, toConstituencyId, voterOwnerId }, acknowledgement) => {
+      handleGameAction(socket, roomCode, acknowledgement, (session) =>
+        gameManager.gerrymander(session.roomCode, session.playerId, fromConstituencyId, toConstituencyId, voterOwnerId));
     });
 
     socket.on("disconnect", () => {
@@ -286,4 +247,20 @@ void nextApp.prepare().then(() => {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "An unexpected server error occurred.";
+}
+
+/** Keeps only the known, correctly typed power parameters sent by a client. */
+function sanitizeParams(input: unknown): PowerParams {
+  if (!input || typeof input !== "object") return {};
+  const raw = input as Record<string, unknown>;
+  const text = (value: unknown) => (typeof value === "string" && value.length < 100 ? value : undefined);
+  const params: PowerParams = {
+    targetPlayerId: text(raw.targetPlayerId),
+    constituencyId: text(raw.constituencyId),
+    destinationId: text(raw.destinationId),
+    resourceType: text(raw.resourceType) as PowerParams["resourceType"],
+    secondResourceType: text(raw.secondResourceType) as PowerParams["secondResourceType"],
+  };
+  if (raw.resources && typeof raw.resources === "object") params.resources = raw.resources as PowerParams["resources"];
+  return params;
 }
